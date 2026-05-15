@@ -8,6 +8,7 @@ import {
   Calculator, 
   MessageSquare, 
   AlertTriangle, 
+  AlertCircle,
   Download, 
   Plus, 
   Trash2, 
@@ -162,6 +163,7 @@ const TaxAdvisory = () => {
   const [guideSearchQuery, setGuideSearchQuery] = useState("");
   const [isSearchingGuides, setIsSearchingGuides] = useState(false);
   const [isListening, setIsListening] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const chatEndRef = React.useRef<HTMLDivElement>(null);
   const recognitionRef = React.useRef<any>(null);
 
@@ -256,9 +258,16 @@ const TaxAdvisory = () => {
     if (!queryText.trim()) return;
     const textToSubmit = queryText;
     setLoading(true);
+    setError(null);
     setQueryText("");
     
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || "" });
+    if (!(process.env.GEMINI_API_KEY)) {
+      setError("API Key is missing. Please set GEMINI_API_KEY in your Vercel Environment Variables.");
+      setLoading(false);
+      return;
+    }
+
+    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
     // Fetch Knowledge Base context
     const kbTopics = JSON.parse(localStorage.getItem('tax_gpt_kb_topics') || '[]');
@@ -462,8 +471,9 @@ const TaxAdvisory = () => {
       setAttachments([]);
       setCurrentUrls([]);
       setShowUrlInput(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error("AI Error:", error);
+      setError(error?.message || "An unexpected error occurred. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -927,6 +937,21 @@ const TaxAdvisory = () => {
 
         {/* Input Area */}
         <div className="p-4 bg-white border-t border-slate-100">
+          {error && (
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-3 text-red-700 text-sm animate-in fade-in slide-in-from-bottom-2 duration-300">
+              <AlertCircle className="w-5 h-5 shrink-0" />
+              <div className="flex-1">
+                <p className="font-semibold">Error Occurred</p>
+                <p>{error}</p>
+                <button 
+                  onClick={() => setError(null)}
+                  className="mt-1 text-xs font-bold underline hover:no-underline"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          )}
           <div className="relative bg-slate-50 rounded-xl border border-slate-200 focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-500 transition-all">
             <textarea
               className="w-full p-4 pr-24 bg-transparent border-none outline-none resize-none text-sm text-slate-800 placeholder:text-slate-400"

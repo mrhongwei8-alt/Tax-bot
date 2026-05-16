@@ -201,7 +201,7 @@ const parseAIError = (error: any): string => {
   const combinedStr = (error?.message || "") + " " + detail;
 
   if (combinedStr.includes('429') || combinedStr.includes('RESOURCE_EXHAUSTED') || combinedStr.toLowerCase().includes('quota') || errorCode === '429') {
-    return "API Rate Limit or Daily Quota Exceeded. Free tier has strict limits: 15 requests/min and 1,500 requests/day. If you've wait a minute and it persists, you may have reached the daily cap. Check your usage at https://aistudio.google.com/app/plan_billing";
+    return "API Limit Encountered. Free tier limits: 15 requests/min and 1,500 requests/day. If you've waited a minute and it persists, you may have reached the daily cap. Check your usage at https://aistudio.google.com/app/plan_billing";
   } else if (combinedStr.includes('403') || combinedStr.toLowerCase().includes('permission') || combinedStr.toLowerCase().includes('apikey') || errorCode === '403') {
     return "API key restricted or invalid. Check your Vercel Environment Variables and verify the key has 'Generative Language API' enabled in Google AI Studio.";
   }
@@ -373,10 +373,9 @@ const TaxAdvisory = () => {
       return;
     }
 
-    const systemPrompt = `Expert Singapore Tax Advisor (Big 4 background). 
-    Base advice on Income Tax Act & IRAS guides. 
-    JSON Output: { answer, explanation, assumptions:[], references:[], citations:[{source, link, location, snippet, type, relevance}] }. 
-    Links: Use verified IRAS URLs. No .aspx or /irashome/.`;
+    const systemPrompt = `Expert SG Tax Advisor. Use Income Tax Act & IRAS e-Tax guides.
+    Format JSON: { "answer": "string", "explanation": "string", "assumptions": ["string"], "references": ["string"], "citations": [{ "source": "string", "link": "string", "location": "string", "snippet": "string", "type": "Legislation"|"IRAS Guide"|"General", "relevance": "High"|"Medium" }] }.
+    Guidelines: Verified IRAS links only (no .aspx). If unsure, advise professional consultation.`;
 
     try {
       let currentChatHistory: { role: 'user' | 'model'; text: string }[] = [];
@@ -423,7 +422,7 @@ const TaxAdvisory = () => {
       }
 
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-1.5-flash",
         contents: [
           ...cleanedHistory,
           { role: 'user', parts }
@@ -633,7 +632,7 @@ const TaxAdvisory = () => {
 
     try {
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-1.5-flash",
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: { 
           responseMimeType: "application/json",
@@ -2343,7 +2342,7 @@ const IRASQueryResponse = () => {
 
     try {
       const result = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-1.5-flash",
         contents: [{ role: 'user', parts: [{ text: `IRAS Letter: ${letterText}` }] }],
         config: { 
           systemInstruction: systemPrompt,

@@ -422,7 +422,7 @@ const TaxAdvisory = () => {
       }
 
       const response = await ai.models.generateContent({
-        model: "gemini-1.5-flash",
+        model: "gemini-3-flash-preview",
         contents: [
           ...cleanedHistory,
           { role: 'user', parts }
@@ -632,7 +632,7 @@ const TaxAdvisory = () => {
 
     try {
       const response = await ai.models.generateContent({
-        model: "gemini-1.5-flash",
+        model: "gemini-3-flash-preview",
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: { 
           responseMimeType: "application/json",
@@ -1447,7 +1447,7 @@ const TaxComputation = () => {
       Return JSON: { 'accountingProfit': number, 'adjustments': [ { 'item', 'amount', 'impact', 'reason', 'implication' } ] }`;
 
       const response = await ai.models.generateContent({
-        model: "gemini-1.5-flash",
+        model: "gemini-3-flash-preview",
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: { responseMimeType: "application/json" }
       });
@@ -2277,7 +2277,7 @@ const IRASQueryResponse = () => {
       Return a concise summary of these facts.`;
 
       const result = await ai.models.generateContent({
-        model: "gemini-1.5-flash",
+        model: "gemini-3-flash-preview",
         contents: [{ role: 'user', parts: [prompt, ...validParts] }]
       });
 
@@ -2342,7 +2342,7 @@ const IRASQueryResponse = () => {
 
     try {
       const result = await ai.models.generateContent({
-        model: "gemini-1.5-flash",
+        model: "gemini-3-flash-preview",
         contents: [{ role: 'user', parts: [{ text: `IRAS Letter: ${letterText}` }] }],
         config: { 
           systemInstruction: systemPrompt,
@@ -2587,7 +2587,7 @@ const ComputationReview = () => {
 
     try {
       const response = await ai.models.generateContent({
-        model: "gemini-1.5-flash",
+        model: "gemini-3-flash-preview",
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: { responseMimeType: "application/json" }
       });

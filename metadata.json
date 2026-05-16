@@ -1,5 +1,6 @@
 {
   "name": "TaxGPT Singapore",
   "description": "Professional AI-powered tax advisory and corporate tax computation tool for Singapore businesses.",
-  "requestFramePermissions": ["microphone"]
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

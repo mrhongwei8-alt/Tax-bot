@@ -56,8 +56,18 @@ const PARTIAL_TAX_EXEMPTION = {
 };
 
 // --- CACHE & HEURISTICS ---
-const searchCache = new Map<string, any>();
-const advisoryCache = new Map<string, any>();
+const getSessionCache = (key: string) => {
+  try {
+    const cached = sessionStorage.getItem(`taxgpt_cache_${key}`);
+    return cached ? JSON.parse(cached) : null;
+  } catch { return null; }
+};
+
+const setSessionCache = (key: string, data: any) => {
+  try {
+    sessionStorage.setItem(`taxgpt_cache_${key}`, JSON.stringify(data));
+  } catch { /* session storage full */ }
+};
 
 const LOCAL_QUICK_LINKS = [
   { title: "Corporate Income Tax", link: "https://www.iras.gov.sg/taxes/corporate-income-tax", type: "General" },
@@ -191,7 +201,7 @@ const parseAIError = (error: any): string => {
   const combinedStr = (error?.message || "") + " " + detail;
 
   if (combinedStr.includes('429') || combinedStr.includes('RESOURCE_EXHAUSTED') || combinedStr.toLowerCase().includes('quota') || errorCode === '429') {
-    return "API Quota Exceeded: You've reached the usage limit for your Gemini API key. Free tier keys have strict rate limits (e.g., 2-15 requests per minute). Please wait a minute before trying again, or check your billing at https://aistudio.google.com/app/plan_billing";
+    return "API Rate Limit or Daily Quota Exceeded. Free tier has strict limits: 15 requests/min and 1,500 requests/day. If you've wait a minute and it persists, you may have reached the daily cap. Check your usage at https://aistudio.google.com/app/plan_billing";
   } else if (combinedStr.includes('403') || combinedStr.toLowerCase().includes('permission') || combinedStr.toLowerCase().includes('apikey') || errorCode === '403') {
     return "API key restricted or invalid. Check your Vercel Environment Variables and verify the key has 'Generative Language API' enabled in Google AI Studio.";
   }
@@ -350,12 +360,12 @@ const TaxAdvisory = () => {
     `;
 
     const cacheKey = `${textToSubmit.toLowerCase()}_${selectedChatId || 'new'}`;
-    if (advisoryCache.has(cacheKey) && attachments.length === 0 && currentUrls.length === 0) {
-      const cached = advisoryCache.get(cacheKey);
+    const cachedResponse = getSessionCache(cacheKey);
+    if (cachedResponse && attachments.length === 0 && currentUrls.length === 0) {
       if (selectedChatId) {
-        setHistory(history.map(h => h.id === selectedChatId ? { ...h, ...cached } : h));
+        setHistory(history.map(h => h.id === selectedChatId ? { ...h, ...cachedResponse } : h));
       } else {
-        const newEntry = { id: Date.now().toString(), query: textToSubmit, ...cached, timestamp: new Date().toISOString() };
+        const newEntry = { id: Date.now().toString(), query: textToSubmit, ...cachedResponse, timestamp: new Date().toISOString() };
         setHistory([newEntry, ...history].slice(0, 10));
         setSelectedChatId(newEntry.id);
       }
@@ -363,42 +373,10 @@ const TaxAdvisory = () => {
       return;
     }
 
-    const systemPrompt = `You are an expert Singapore Tax Consultant (Big 4 background). 
-    Provide advice based on the Income Tax Act of Singapore and IRAS guidelines.
-    
-    You have access to a local Knowledge Base and Google Search for real-time grounding.
-    
-    Format your response in JSON with these keys: 
-    'answer' (direct answer), 
-    'explanation' (detailed reasoning), 
-    'assumptions' (list of strings), 
-    'references' (IRAS e-Tax guides or Section numbers),
-    'citations' (array of objects with:
-       'source': Specific title of the page or e-Tax guide (e.g., "IRAS e-Tax Guide: Deductibility of Expenses"),
-       'link': FULL absolute URL starting with https://,
-       'location': Specific section, paragraph, or page number,
-       'snippet': A brief (1-2 sentence) key takeaway or quote from this specific source that supports your answer,
-       'searchQuery': A highly specific search query that would lead a user directly to this information on Google or IRAS website,
-       'type': One of ['Legislation', 'IRAS Guide', 'Circular', 'General'],
-       'relevance': One of ['High', 'Medium', 'Low']).
-    
-    CRITICAL LINK GUIDELINES:
-    1. For 'link', you MUST provide the EXACT absolute URL found in the Google Search results. 
-    2. NEVER guess, construct, or hallucinate a URL structure. If you do not have the exact URL, leave the 'link' field EMPTY ("").
-    3. IMPORTANT: IRAS has updated their website. AVOID links containing '/irashome/' or ending in '.aspx'. These are deprecated and lead to 404 errors. 
-    4. PREFER links starting with 'https://www.iras.gov.sg/taxes/' or 'https://www.iras.gov.sg/quick-links/'.
-    5. New IRAS structure examples:
-       - Corporate Tax: https://www.iras.gov.sg/taxes/corporate-income-tax
-       - GST: https://www.iras.gov.sg/taxes/goods-and-services-tax-(gst)
-       - Individual Tax: https://www.iras.gov.sg/taxes/individual-income-tax
-    6. If you cannot find a direct, verified link to the specific page, leave 'link' empty and provide the 'source' and 'location' so the user can search for it.
-    7. Ensure all links start with https://.
-    8. DO NOT provide links to PDFs directly unless you are certain they work.
-    
-    If you use information from the Knowledge Base, cite the file name or topic title and provide the link if available in the context.
-    If you use information from Google Search, cite the website name and provide the EXACT URL from the search result.
-    
-    Be conservative. If unsure, advise professional consultation.`;
+    const systemPrompt = `Expert Singapore Tax Advisor (Big 4 background). 
+    Base advice on Income Tax Act & IRAS guides. 
+    JSON Output: { answer, explanation, assumptions:[], references:[], citations:[{source, link, location, snippet, type, relevance}] }. 
+    Links: Use verified IRAS URLs. No .aspx or /irashome/.`;
 
     try {
       let currentChatHistory: { role: 'user' | 'model'; text: string }[] = [];
@@ -523,7 +501,7 @@ const TaxAdvisory = () => {
           { role: 'model', text: content.answer }
         ]
       };
-      advisoryCache.set(cacheKey, cacheData);
+      setSessionCache(cacheKey, cacheData);
 
       if (activeChatId) {
         const updatedHistory = history.map(h => {
@@ -614,9 +592,10 @@ const TaxAdvisory = () => {
     };
 
     // 1. Check Cache
-    const cacheKey = query.toLowerCase();
-    if (searchCache.has(cacheKey)) {
-      processResults(searchCache.get(cacheKey), query);
+    const cacheKey = `search_${query.toLowerCase()}`;
+    const cachedResults = getSessionCache(cacheKey);
+    if (cachedResults) {
+      processResults(cachedResults, query);
       setIsSearchingGuides(false);
       return;
     }
@@ -664,7 +643,7 @@ const TaxAdvisory = () => {
       
       const data = JSON.parse(response.text);
       if (data && data.results) {
-        searchCache.set(cacheKey, data);
+        setSessionCache(cacheKey, data);
       }
       
       processResults(data, query);
@@ -1423,8 +1402,9 @@ const TaxComputation = () => {
 
     // Cache check
     const cacheKey = `analyze_${fileId}_${selectedYA}`;
-    if (searchCache.has(cacheKey)) {
-      setAnalysisResults(searchCache.get(cacheKey).adjustments || []);
+    const cachedAnalysis = getSessionCache(cacheKey);
+    if (cachedAnalysis) {
+      setAnalysisResults(cachedAnalysis.adjustments || []);
       setShowAnalysis(true);
       return;
     }
@@ -1474,7 +1454,7 @@ const TaxComputation = () => {
       });
 
       const parsed = JSON.parse(response.text);
-      searchCache.set(cacheKey, parsed);
+      setSessionCache(cacheKey, parsed);
       setAnalysisResults(parsed.adjustments || []);
       
       // If it's a direct auto-populate request, we can update the profit too
@@ -1886,9 +1866,11 @@ const TaxComputation = () => {
                     {file.name.match(/\.(xls|xlsx)$/) && (
                       <button 
                         onClick={() => analyzeExcel(file.id)}
-                        className="text-emerald-600 hover:bg-emerald-50 p-1.5 rounded-lg transition-colors flex items-center gap-1 text-[10px] font-bold border border-emerald-100"
+                        disabled={analyzing}
+                        className="text-emerald-600 hover:bg-emerald-50 p-1.5 rounded-lg transition-colors flex items-center gap-1 text-[10px] font-bold border border-emerald-100 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        <Sparkles size={14} /> AI Analyze
+                        {analyzing ? <RefreshCw size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                        {analyzing ? "Analyzing..." : "AI Analyze"}
                       </button>
                     )}
                     <button onClick={() => removeFile(file.id)} className="text-slate-300 hover:text-red-500 transition-all p-1">
@@ -2345,8 +2327,9 @@ const IRASQueryResponse = () => {
     if (!letterText.trim()) return;
     
     const cacheKey = `draft_${letterText.slice(0, 100)}_${evidenceInsights.slice(0, 50)}`;
-    if (advisoryCache.has(cacheKey)) {
-      setResponse(advisoryCache.get(cacheKey));
+    const cachedDraft = getSessionCache(cacheKey);
+    if (cachedDraft) {
+      setResponse(cachedDraft);
       setFeedback(null);
       return;
     }
@@ -2369,7 +2352,7 @@ const IRASQueryResponse = () => {
       });
       
       const parsed = JSON.parse(result.text);
-      advisoryCache.set(cacheKey, parsed);
+      setSessionCache(cacheKey, parsed);
       setResponse(parsed);
       setFeedback(null);
     } catch (error: any) {
@@ -2591,8 +2574,9 @@ const ComputationReview = () => {
     if (uploadedFiles.length === 0) return;
     
     const cacheKey = `review_${uploadedFiles.map(f => f.id).join('_')}`;
-    if (advisoryCache.has(cacheKey)) {
-      setReviewResult(advisoryCache.get(cacheKey));
+    const cachedReview = getSessionCache(cacheKey);
+    if (cachedReview) {
+      setReviewResult(cachedReview);
       return;
     }
 
@@ -2604,12 +2588,12 @@ const ComputationReview = () => {
 
     try {
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: "gemini-1.5-flash",
         contents: [{ role: 'user', parts: [{ text: prompt }] }],
         config: { responseMimeType: "application/json" }
       });
       const parsed = JSON.parse(response.text);
-      advisoryCache.set(cacheKey, parsed);
+      setSessionCache(cacheKey, parsed);
       setReviewResult(parsed);
     } catch (error: any) {
       setError(parseAIError(error));
